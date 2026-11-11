@@ -1,0 +1,390 @@
+---
+title: "FinalPro574E"
+author: "Caroline Schwengler"
+date: "2026-11-10"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+Since all of our questions required different information and formatting, I ended up making a dataset for each question.
+We will want to use seasonal_monthly for our second research question. We could also use it for the first question but birds_monthy and birds_monthly_fam is probably preferable for that application. The season_strain data set should be used for the third research question. At this point, based on our outline I havve only included the families in birds_monthly_fam if we have enough data/power for our analysis and it is found significant in the first question, I can pull it in for the others but for now I wanted to avoid too many bins
+
+TODO Are all strains present in bird data set and of interest (get Allison input)
+
+TODO Potentially change season breakdown to be bird seasons instead (get Cooper input)
+
+
+## Cleaning and aggregating the data
+
+```{r}
+mammals_orig <- read.csv("./hpai-mammals.csv")
+head(mammals_orig)
+
+birds_orig <- read.csv("./hpai-wild-birds.csv")
+head(birds_orig)
+```
+
+Only three strains for the mammals but many more for birds, do some these mean the same and should be data cleaned? Can check if all of these still exist after filtering the birds to those 500+ cases
+
+```{r}
+unique(mammals_orig$HPAI.Strain)
+unique(birds_orig$HPAI.Strain)
+```
+
+Family labels done by Allison
+
+```{r}
+library(dplyr)
+library(stringr)
+
+# Mammal families
+hpai_mammals <- mammals_orig %>%
+  mutate(captive = str_detect(Species, "\\(captive\\)"),
+         species_clean = Species %>% str_remove("\\s*\\(captive\\)") %>%
+           str_squish() %>% str_to_lower())
+
+hpai_mammals <- hpai_mammals %>%
+  mutate(
+    group = case_when(
+      species_clean == "domestic cat" ~ "Domestic cat",
+      species_clean %in% c("bobcat", "mountain lion", "canada lynx", "eurasian lynx",
+                           "african lion", "amur leopard", "tiger", "amur tiger",
+                           "bengal tiger", "hybrid tiger", "geoffroy's cat", "serval",
+                           "savannah cat") ~ "Non-domestic felid",
+      species_clean %in% c("red fox", "gray fox", "arctic fox", "catalina island fox",
+                           "fox (unidentified)", "coyote") ~ "Canid",
+      species_clean %in% c("american black bear", "black bear", "grizzly bear",
+                           "kodiak bear", "polar bear") ~ "Bear",
+      species_clean %in% c("american mink", "american marten", "fisher", "ermine",
+                           "long-tailed weasel", "north american river otter") ~ "Mustelid",
+      species_clean %in% c("raccoon", "striped skunk", "skunk (unidentified)") ~ "Raccoon & skunk",
+      species_clean %in% c("bottlenose dolphin", "california sea lion", "grey seal",
+                           "harbor seal", "northern elephant seal", "sea otter") ~ "Marine mammal",
+      species_clean %in% c("house mouse", "deer mouse", "black rat", "norway rat",
+                           "prairie vole", "muskrat", "abert's squirrel",
+                           "eastern gray squirrel", "round-tailed ground squirrel",
+                           "thirteen-lined ground squirrel") ~ "Rodent",
+      species_clean == "desert cottontail" ~ "Lagomorph",
+      species_clean == "virginia opossum" ~ "Opossum",
+      TRUE ~ NA_character_
+    ),
+    family = case_when(
+      group %in% c("Domestic cat", "Non-domestic felid") ~ "Felidae",
+      group == "Canid" ~ "Canidae",
+      group == "Bear" ~ "Ursidae",
+      species_clean == "raccoon" ~ "Procyonidae",
+      species_clean %in% c("striped skunk", "skunk (unidentified)") ~ "Mephitidae",
+      species_clean %in% c("bottlenose dolphin") ~ "Delphinidae",
+      species_clean == "california sea lion" ~ "Otariidae",
+      species_clean %in% c("grey seal", "harbor seal", "northern elephant seal") ~ "Phocidae",
+      group == "Mustelid" | species_clean == "sea otter" ~ "Mustelidae",
+      species_clean %in% c("house mouse", "black rat", "norway rat") ~ "Muridae",
+      species_clean %in% c("deer mouse", "prairie vole", "muskrat") ~ "Cricetidae",
+      str_detect(species_clean, "squirrel") ~ "Sciuridae",
+      group == "Lagomorph" ~ "Leporidae",
+      group == "Opossum" ~ "Didelphidae",
+      TRUE ~ NA_character_
+    )
+  )
+
+table(hpai_mammals$family)
+```
+
+```{r}
+hpai_birds <- birds_orig %>%
+  mutate(
+    species_clean = str_to_lower(str_squish(`Bird.Species`)),
+    unidentified  = str_detect(species_clean, "unidentified"),
+    
+    # exotic or domestic birds, probably zoo/farm/pet rather than wild migrants
+    likely_captive = species_clean %in% c(
+      "muscovy duck","african goose","peafowl (unidentified)","chilean flamingo",
+      "lesser flamingo","flamingo (unidentified)","greater rhea","rhea (unidentified)","emu",
+      "macaw (unidentified)","african gray parrot","lorikeet (unidentified)","kookaburra (unidentified)",
+      "african crowned crane","blue crane","king vulture","scarlet ibis","plush-crested jay",
+      "southern screamer","red-breasted goose","swan goose","baer's pochard","baikal teal",
+      "scaly-sided merganser","smew","egyptian goose","brazilian teal","puna teal","black swan",
+      "black-necked swan","dalmatian pelican","nene","whooper swan"),
+    
+    family = case_when(
+      species_clean %in% c("canada goose","black-bellied whistling duck","mallard","american black duck",
+                           "green-winged teal","blue-winged teal","northern shoveler","northern pintail",
+                           "muscovy duck","cinnamon teal","wood duck","trumpeter swan","redhead","gadwall",
+                           "mute swan","hooded merganser","common eider","snow goose","cackling goose",
+                           "greater white-fronted goose","bufflehead","ross's goose","swan (unidentified)",
+                           "common merganser","red-breasted merganser","surf scoter","tundra swan","brant",
+                           "goose (unidentified)","duck (unidentified)","african goose","american wigeon",
+                           "ring-necked duck","whooper swan","lesser scaup","canvasback",
+                           "mallard/black duck hybrid","ruddy duck","greater scaup","common goldeneye",
+                           "black scoter","white-winged scoter","mottled duck","red-breasted goose",
+                           "long-tailed duck","fulvous whistling-duck","merganser (unidentified)",
+                           "eider (unidentified)","teal (unidentified)","egyptian goose","brazilian teal",
+                           "puna teal","swan goose","scaly-sided merganser","smew","baer's pochard",
+                           "baikal teal","black swan","black-necked swan","nene",
+                           "wild hybrid duck (anatidae)") ~ "Anatidae",
+      species_clean %in% c("california gull","ring-billed gull","american herring gull",
+                           "great black-backed gull","caspian tern","glaucous gull","black-legged kittiwake",
+                           "common tern","western gull","gull (unidentified)","bonaparte's gull",
+                           "lesser black-backed gull","black skimmer","laughing gull","sabine's gull",
+                           "arctic tern","short-billed gull","thayer's gull","glaucous-winged gull",
+                           "royal tern","sandwich tern","forster's tern") ~ "Laridae",
+      species_clean == "parasitic jaeger" ~ "Stercorariidae",
+      species_clean %in% c("common murre","razorbill") ~ "Alcidae",
+      species_clean %in% c("red-tailed hawk","bald eagle","red-shouldered hawk","golden eagle",
+                           "cooper's hawk","swainson's hawk","sharp-shinned hawk","hawk (unidentified)",
+                           "rough-legged hawk","northern harrier","ferruginous hawk","harris's hawk",
+                           "broad-winged hawk","american goshawk","eagle (unidentified)") ~ "Accipitridae",
+      species_clean %in% c("turkey vulture","black vulture","vulture (unidentified)","king vulture",
+                           "california condor") ~ "Cathartidae",
+      species_clean %in% c("peregrine falcon","american kestrel","merlin","prairie falcon",
+                           "falcon (unidentified)","crested caracara") ~ "Falconidae",
+      species_clean == "osprey" ~ "Pandionidae",
+      species_clean %in% c("great horned owl","barred owl","snowy owl","owl (unidentified)",
+                           "eastern screech owl","long-eared owl","western screech owl","burrowing owl",
+                           "short-eared owl") ~ "Strigidae",
+      species_clean == "american barn owl" ~ "Tytonidae",
+      species_clean %in% c("american crow","common raven","fish crow","crow (unidentified)","blue jay",
+                           "magpie (unidentified)","black-billed magpie","plush-crested jay") ~ "Corvidae",
+      species_clean %in% c("eurasian collared dove","rock pigeon","mourning dove","white-winged dove",
+                           "pigeon (unidentified)") ~ "Columbidae",
+      species_clean %in% c("sandhill crane","whooping crane","african crowned crane","blue crane",
+                           "crane (unidentified)") ~ "Gruidae",
+      species_clean %in% c("american white pelican","pelican (unidentified)","brown pelican",
+                           "dalmatian pelican") ~ "Pelecanidae",
+      species_clean %in% c("brandt's cormorant","cormorant (unidentified)","double-crested cormorant",
+                           "neotropic cormorant") ~ "Phalacrocoracidae",
+      species_clean == "northern gannet" ~ "Sulidae",
+      species_clean %in% c("black-crowned night heron","little blue heron","great blue heron","snowy egret",
+                           "great egret","green heron","heron (unidentified)","western cattle-egret") ~ "Ardeidae",
+      species_clean %in% c("roseate spoonbill","white-faced ibis","glossy ibis","scarlet ibis") ~ "Threskiornithidae",
+      species_clean == "wood stork" ~ "Ciconiidae",
+      species_clean %in% c("eared grebe","pied-billed grebe","horned grebe","red-necked grebe",
+                           "western grebe") ~ "Podicipedidae",
+      species_clean %in% c("common loon","pacific loon") ~ "Gaviidae",
+      species_clean %in% c("short-tailed shearwater","northern fulmar") ~ "Procellariidae",
+      species_clean %in% c("dunlin","marbled godwit","red-necked phalarope","sanderling","western sandpiper",
+                           "greater yellowlegs","lesser yellowlegs","american woodcock","ruddy turnstone",
+                           "black turnstone","willet") ~ "Scolopacidae",
+      species_clean %in% c("killdeer","snowy plover","black-bellied plover") ~ "Charadriidae",
+      species_clean == "black-necked stilt" ~ "Recurvirostridae",
+      species_clean == "american coot" ~ "Rallidae",
+      species_clean %in% c("chilean flamingo","lesser flamingo","flamingo (unidentified)") ~ "Phoenicopteridae",
+      species_clean %in% c("wild turkey","greater sage grouse","ruffed grouse","ring-necked pheasant",
+                           "pheasant (unidentified)","peafowl (unidentified)") ~ "Phasianidae",
+      species_clean %in% c("gambel's quail","california quail") ~ "Odontophoridae",
+      species_clean == "house sparrow" ~ "Passeridae",
+      species_clean %in% c("savannah sparrow","lincoln's sparrow","song sparrow","dark-eyed junco",
+                           "white-crowned sparrow","lark sparrow") ~ "Passerellidae",
+      species_clean == "sparrow (unidentified)" ~ "Passeriformes (unid.)",
+      species_clean %in% c("western meadowlark","great-tailed grackle","common grackle","brewer's blackbird",
+                           "boat-tailed grackle","red-winged blackbird","grackle (unidentified)",
+                           "blackbird (unidentified)") ~ "Icteridae",
+      species_clean == "european starling" ~ "Sturnidae",
+      species_clean %in% c("bluebird (unidentified)","hermit thrush","american robin") ~ "Turdidae",
+      species_clean %in% c("finch (unidentified)","house finch") ~ "Fringillidae",
+      species_clean == "horned lark" ~ "Alaudidae",
+      species_clean %in% c("barn swallow","swallow (unidentified)","tree swallow") ~ "Hirundinidae",
+      species_clean %in% c("say's phoebe","western kingbird") ~ "Tyrannidae",
+      species_clean == "warbler (unidentified)" ~ "Parulidae",
+      species_clean == "lark bunting" ~ "Calcariidae",
+      species_clean == "summer tanager" ~ "Cardinalidae",
+      species_clean %in% c("macaw (unidentified)","african gray parrot") ~ "Psittacidae",
+      species_clean == "lorikeet (unidentified)" ~ "Psittaculidae",
+      species_clean == "kookaburra (unidentified)" ~ "Alcedinidae",
+      species_clean %in% c("greater rhea","rhea (unidentified)") ~ "Rheidae",
+      species_clean == "emu" ~ "Casuariidae",
+      species_clean == "southern screamer" ~ "Anhimidae",
+      TRUE ~ NA_character_
+    )
+  )
+table(hpai_birds$family)
+```
+
+Different date ranges
+
+```{r}
+range(hpai_mammals$Date.Collected, na.rm = TRUE)
+range(hpai_birds$Collection.Date, na.rm = TRUE)
+```
+
+Convert dates to date objects, fill missing values in the Collection.Date with the Date.Detected. Filter to only the bird species with at least 500 cases over time and filter both data sets to be the same time frame with only complete months. Also removed observations for which the county was unknown.
+
+```{r}
+library(lubridate)
+
+hpai_mammals$Date.Collected <- as.Date(hpai_mammals$Date.Collected, format = "%m/%d/%Y")
+hpai_mammals$Date.Detected <- as.Date(hpai_mammals$Date.Detected, format = "%m/%d/%Y")
+
+hpai_birds <- hpai_birds %>%
+  mutate(Collection.Date = na_if(Collection.Date, "Unknown"),
+    Collection.Date = coalesce(Collection.Date, Date.Detected),
+    Collection.Date = as.Date(Collection.Date, format = "%m/%d/%Y"),
+    Date.Detected = as.Date(Date.Detected, format = "%m/%d/%Y"))
+
+hpai_birds <- hpai_birds %>% filter(Collection.Date >= as.Date("2022-04-01") & Collection.Date <= as.Date("2026-08-31")) %>% filter(County != "Unknown")
+
+species500 <- hpai_birds %>%
+  filter(WOAH.Classification == "Wild bird") %>%
+  count(family) %>%
+  filter(n > 500) %>%
+  pull(family)
+
+birds <- hpai_birds %>% filter(family %in% species500) 
+mammals <- hpai_mammals %>% filter(Date.Collected <= as.Date("2026-08-31") & Date.Collected >= as.Date("2022-04-01"))
+```
+
+```{r}
+dim(birds)
+dim(mammals)
+```
+
+
+Aggregating cases by county and month
+
+```{r}
+mammal_monthly <- mammals %>%
+  mutate(year_month = floor_date(Date.Collected, "month")) %>%
+  count(State, County, year_month, name = "m_cases")
+#mammal_monthly
+
+bird_monthly <- birds %>%
+  mutate(year_month = floor_date(Collection.Date, "month")) %>%
+  count(State, County, year_month, name = "b_cases")
+#bird_monthly
+
+bird_monthly_fam <- birds %>%
+  mutate(year_month = floor_date(Collection.Date, "month")) %>%
+  count(State, County, year_month, family, name = "case_per_family") %>%
+  mutate(total_county_cases = sum(case_per_family), .by = c(State, County, year_month))
+#bird_monthly_fam
+
+monthly_cases <-bird_monthly %>%
+  full_join(mammal_monthly, by = c("State", "County", "year_month")) %>%
+  mutate(b_cases = coalesce(b_cases, 0), m_cases = coalesce(m_cases, 0),
+    total_cases = b_cases + m_cases)
+
+#head(monthly_cases)
+```
+
+There don't appear to be enough mammal cases for the monthly breakdown to work well. The seasonal aggregates work better but still may struggle to be informative
+
+Can easily change the names or timing of the seasons to be more backed by existing bird migration expertise, if appropriate. 
+
+```{r}
+seasonal_cases <- monthly_cases %>%
+  mutate(Year = year(ymd(year_month)),
+    month_num = month(ymd(year_month)),
+    Season = case_when(month_num %in% 3:5  ~ "Spring",
+      month_num %in% 6:8  ~ "Summer",
+      month_num %in% 9:11 ~ "Fall",
+      TRUE                ~ "Winter" )) %>%
+  group_by(State, County, Year, Season) %>%
+  summarise(total_cases = sum(total_cases, na.rm = TRUE),
+    b_cases = sum(b_cases, na.rm = TRUE),
+    m_cases = sum(m_cases, na.rm = TRUE), .groups = "drop")
+
+head(seasonal_cases)
+```
+
+Reaggregate by strain for the third research question
+
+```{r}
+m_month_strain <- mammals %>%
+  mutate(year_month = floor_date(Date.Collected, "month")) %>%
+  count(State, County, year_month, HPAI.Strain, name = "m_cases")
+
+b_month_strain <- birds %>%
+  mutate(year_month = floor_date(Collection.Date, "month")) %>%
+  count(State, County, year_month, HPAI.Strain, name = "b_cases")
+
+month_strain <- b_month_strain %>% 
+  full_join(m_month_strain, by = c("State", "County", "year_month", "HPAI.Strain")) %>%
+  mutate(b_cases = coalesce(b_cases, 0), m_cases = coalesce(m_cases, 0), total_cases = b_cases + m_cases)
+
+season_strain <- month_strain %>%
+  mutate(Year = year(year_month),
+    month_num = month(year_month),
+    Season = case_when(month_num %in% 3:5  ~ "Spring",
+      month_num %in% 6:8  ~ "Summer",
+      month_num %in% 9:11 ~ "Fall",
+      TRUE                ~ "Winter")) %>%
+  group_by(State, County, Year, Season, HPAI.Strain) %>%
+  summarise(total_cases = sum(total_cases, na.rm = TRUE),
+    b_cases = sum(b_cases, na.rm = TRUE),
+    m_cases = sum(m_cases, na.rm = TRUE), .groups = "drop")
+
+head(season_strain)
+```
+
+We will want to use seasonal_monthly for our second research question. We could also use it for the first question but birds_monthy and birds_monthly_fam is probably preferable for that application. The season_strain data set should be used for the third research question.
+
+## Basic Plot
+
+```{r}
+library(tidyverse)
+library(tigris)
+library(sf)
+library(viridis)
+
+county_shapes <- tigris::counties(cb = TRUE, year = 2020) 
+
+states_dc <- c(state.name, "District of Columbia")
+county_shapes <- county_shapes %>% filter(STATE_NAME %in% states_dc)
+county_shapes <- tigris::shift_geometry(county_shapes) # Need this so plots are centered and not too small
+
+# Can repeat similar process to get plots by season or family
+cases_annual <- seasonal_cases %>%
+  group_by(State, County, Year) %>%
+  summarise(total_cases = sum(total_cases, na.rm = TRUE),
+    b_cases = sum(b_cases, na.rm = TRUE),
+    m_cases = sum(m_cases, na.rm = TRUE), .groups = "drop")
+```
+
+Examine the cases that didn't match original boundaries. Seven counties that made up almost two thousand observations.
+
+```{r}
+unmatched_cases <- cases_annual %>% distinct(State, County) %>%
+  anti_join(county_shapes %>%  st_drop_geometry() %>% distinct(STATE_NAME, NAME),
+    by = c("State" = "STATE_NAME", "County" = "NAME"))
+
+unmatched_cases
+```
+
+Can resolve the mismatch manually from how the data was recorded with a simple change in capitalization or punctuation in all but one case. One county in Alaska was split into multiple counties in 2017, since this is only one observation and we have no way of knowing which modern county it would fall into, we have chosen to omit this one point from our analysis.
+
+```{r}
+cases_map_clean <- seasonal_cases %>%
+  mutate(State = recode(State, "DC" = "District of Columbia"),
+    County = recode(County,
+      "Mcintosh" = "McIntosh",
+      "St Clair" = "St. Clair",
+      "Noble" = "Nobles",
+      "St Lawrence" = "St. Lawrence",
+      "St Croix" = "St. Croix"))
+```
+
+
+```{r}
+years <- sort(unique(cases_annual$Year))
+
+map_data <- purrr::map_dfr(years, function(y) {
+  county_shapes %>%
+    mutate(Year = y) %>%
+    left_join(cases_annual %>%
+        filter(Year == y) %>%
+        select(-Year), by = c("NAME" = "County", "STATE_NAME" = "State"))})
+```
+
+
+```{r}
+ggplot(map_data) +
+  geom_sf(aes(fill = total_cases), color = "white", linewidth = 0.08) +
+  facet_wrap(~Year, ncol = 3) +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey85", name = "Total cases") +
+  coord_sf(expand = FALSE) +
+  labs(title = "Total HPAI Cases by County Annually") +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
