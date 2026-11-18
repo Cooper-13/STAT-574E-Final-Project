@@ -7,8 +7,8 @@ output:
   html_document: default
 ---
 
-Since all of our questions required different information and formatting, I ended up making a dataset for each question.
-We will want to use seasonal_monthly for our second research question. We could also use it for the first question but birds_monthy and birds_monthly_fam is probably preferable for that application. The season_strain data set should be used for the third research question. At this point, based on our outline I havve only included the families in birds_monthly_fam if we have enough data/power for our analysis and it is found significant in the first question, I can pull it in for the others but for now I wanted to avoid too many bins
+Since all of our questions required different information and formatting, I ended up making a data set for each question.
+We will want to use seasonal_monthly for our second research question. We could also use it for the first question but birds_monthy and birds_monthly_fam is probably preferable for that application. The season_strain data set should be used for the third research question. At this point, based on our outline I have only included the families in birds_monthly_fam if we have enough data/power for our analysis and it is found significant in the first question, I can pull it in for the others but for now I wanted to avoid too many bins
 
 TODO Are all strains present in bird data set and of interest (get Allison input)
 
@@ -234,6 +234,9 @@ birds <- hpai_birds %>% filter(family %in% species500)
 mammals <- hpai_mammals %>% filter(Date.Collected <= as.Date("2026-08-31") & Date.Collected >= as.Date("2022-04-01"))
 ```
 
+
+
+
 ```{r}
 dim(birds)
 dim(mammals)
@@ -332,6 +335,7 @@ county_shapes <- tigris::counties(cb = TRUE, year = 2020)
 states_dc <- c(state.name, "District of Columbia")
 county_shapes <- county_shapes %>% filter(STATE_NAME %in% states_dc)
 county_shapes <- tigris::shift_geometry(county_shapes) # Need this so plots are centered and not too small
+county_shapes <- county_shapes %>% group_by(NAME, STATE_NAME) %>% summarize(.groups = "drop")
 
 # Can repeat similar process to get plots by season or family
 cases_annual <- seasonal_cases %>%
@@ -387,4 +391,43 @@ ggplot(map_data) +
   theme_void() +
   theme(legend.position = "right")
 ```
+
+## Q2a: When is the highest risk of spillover to mammals?
+
+
+```{r}
+spatial_counties <- county_shapes %>%
+  inner_join(monthly_cases, by = c("NAME" = "County", "STATE_NAME" = "State"), 
+             relationship = "one-to-many")
+```
+
+```{r}
+# Model with no spatial correlation
+spillover_mod <- glm(m_cases ~ b_cases * year_month, data = monthly_cases, family = poisson)
+summary(spillover_mod)
+```
+
+Interaction between the month and the number of bird cases is significant. When this interaction is included, the month is not a significant predictor of the number of mammal cases.
+
+Could pre-compute the weight matrix so it isn't doing a grid search
+Backup use spglm, local = TRUE to treat county centroids as point data (shown in code cell below)\
+
+Below code cell takes a few minutes to run but works for a spatial model if we ignore time and treat the data as a point process using the county centroids instead of areal data as originally planned.
+
+```{r}
+library(spmodel)
+
+spillover_mod <- spglm(m_cases ~ b_cases, data = spatial_counties, family = poisson, local = TRUE) # * year_month
+summary(spillover_mod)
+```
+
+Below code cell takes a few minutes to run.
+
+```{r}
+spillover_modx <- spglm(m_cases ~ b_cases * year_month, data = spatial_counties, family = poisson, local = TRUE) 
+summary(spillover_modx)
+```
+
+Using this simplification we are able to compute an initial spatio-temporal model. None of the coefficients are significant when the covariance type is assumed to be exponential. (Trying this same model with areal data took over an hour to run, now less than ten minutes)
+
 
