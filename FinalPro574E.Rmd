@@ -430,4 +430,90 @@ summary(spillover_modx)
 
 Using this simplification we are able to compute an initial spatio-temporal model. None of the coefficients are significant when the covariance type is assumed to be exponential. (Trying this same model with areal data took over an hour to run, now less than ten minutes)
 
+##Q3: Are there spatial temporal effects on viral strain and what are they?
+
+As noted above there is only 3 variants of HPAI strain, EA H5, EA H5N1 and EA/AM H5N1. Since EA H5 could have any N antigen, and H5 defines avian influenza, the only real variation here is the origin (EA vs EA/AM). The recombinat strain (EA/AM) are the result of co-infection between 2 avian influenza viruses and create novel combinations of viral genes potentially opening the door for increased virulence in birds or mammals. 
+
+I'll start by grouping by origin. 
+I'm also making my predictor variable the proportion of bird infections that are EA/AM to make it easier on myself...may change if I think of a better way to do it
+
+```{r}
+#create the new column
+season_strain_group <- season_strain %>%
+  mutate(
+    origin = case_when(
+      str_detect(HPAI.Strain, "^EA/AM") ~ "EA/AM",
+      str_detect(HPAI.Strain, "^EA")    ~ "EA"
+    )
+  ) %>%
+  group_by(State, County, Year, Season, origin) %>%
+  summarise(m_cases = sum(m_cases, na.rm = TRUE),
+            b_cases = sum(b_cases, na.rm = TRUE),
+            .groups = "drop")
+
+season_strain_model <- season_strain_group %>%
+  pivot_wider(names_from = origin, values_from = c(m_cases, b_cases),
+              names_sep = "_", values_fill = 0) %>%
+  mutate(mam_n = `m_cases_EA` + `m_cases_EA/AM`,
+         bird_n = `b_cases_EA` + `b_cases_EA/AM`,
+         bird_propAM = `b_cases_EA/AM` / bird_n) %>%
+  filter(mam_n > 0, bird_n > 0)
+
+#repeat with the by month data
+month_strain_group <- month_strain %>%
+  mutate(
+    origin = case_when(
+      str_detect(HPAI.Strain, "^EA/AM") ~ "EA/AM",
+      str_detect(HPAI.Strain, "^EA")    ~ "EA",
+      TRUE                              ~ "Other"
+    )
+  ) %>%
+  filter(origin != "Other") %>%
+  group_by(State, County, year_month, origin) %>%
+  summarise(m_cases = sum(m_cases, na.rm = TRUE),
+            b_cases = sum(b_cases, na.rm = TRUE),
+            .groups = "drop")
+
+month_strain_model <- month_strain_group %>%
+  pivot_wider(names_from = origin, values_from = c(m_cases, b_cases),
+              names_sep = "_", values_fill = 0) %>%
+  mutate(mam_n = `m_cases_EA` + `m_cases_EA/AM`,
+         bird_n = `b_cases_EA` + `b_cases_EA/AM`,
+         bird_propAM = `b_cases_EA/AM` / bird_n) %>%
+  filter(mam_n > 0, bird_n > 0)
+```
+
+Lets start with a model with no spatial effect. Could def be a better way to model this, treating this as a first pass.  
+
+Both show a relationship where more bird EA/AM predicts more mammal EA/AM and there is an interaction with time 
+```{r}
+strain_mod_month <- glm(cbind(`m_cases_EA/AM`, `m_cases_EA`)~ bird_propAM * year_month, data = month_strain_model, family = binomial)
+summary(strain_mod)
+
+
+strain_mod_season  <- glm(cbind(`m_cases_EA/AM`, `m_cases_EA`)~ bird_propAM *Season + Year, data = season_strain_model, family = binomial)
+summary(strain_mod_season)
+
+
+```
+
+Lets take a crack at a spatial model now, looks like it is significant with just the proportion of bird AM but loses when adding the time interaction 
+
+```{r}
+spatial_counties_m_strain <- county_shapes %>%
+  inner_join(month_strain_model, by = c("NAME" = "County", "STATE_NAME" = "State"), 
+             relationship = "one-to-many")
+
+spatial_counties_s_strain <- county_shapes %>%
+  inner_join(season_strain_model, by = c("NAME" = "County", "STATE_NAME" = "State"), 
+             relationship = "one-to-many")
+
+spatial_strain_m_model <- spglm(cbind(`m_cases_EA/AM`, `m_cases_EA`)~ bird_propAM*year_month, data = spatial_counties_m_strain, family = binomial, local = TRUE)
+summary(spatial_strain_m_model)
+
+spatial_strain_s_model <- spglm(cbind(`m_cases_EA/AM`, `m_cases_EA`)~ bird_propAM*Season, data = spatial_counties_s_strain, family = binomial, local = TRUE)
+
+summary(spatial_strain_s_model)
+
+```
 
